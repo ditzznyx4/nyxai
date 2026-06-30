@@ -1403,4 +1403,95 @@ async function sendMessage() {
                 btn.textContent = 'Salin';
                 btn.addEventListener('click', () => {
                   const code = pre.querySelector('code');
-                  navigator.clipboard.writeText(code ? code.textContent :
+                  navigator.clipboard.writeText(code ? code.textContent : pre.textContent).then(() => {
+                    btn.textContent = '✓ Disalin!';
+                    setTimeout(() => btn.textContent = 'Salin', 1500);
+                  });
+                });
+                pre.style.position = 'relative';
+                pre.appendChild(btn);
+              }
+            });
+            chatArea.scrollTop = chatArea.scrollHeight;
+          }
+        } catch { /* skip */ }
+      }
+    }
+
+    bubble.classList.remove('streaming');
+
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-action-btn';
+    copyBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Salin';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(fullContent).then(() => {
+        copyBtn.textContent = '✓ Disalin';
+        setTimeout(() => copyBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Salin', 1500);
+      });
+    });
+    actions.appendChild(copyBtn);
+    wrap.appendChild(actions);
+
+    chat.messages.push({ role: 'assistant', content: fullContent });
+    chat.updatedAt = Date.now();
+    saveChats();
+
+  } catch (err) {
+    removeTypingIndicator();
+    statusDot.classList.add('offline');
+    const errMsg = `❌ Error: ${err.message}`;
+    appendMessage('assistant', errMsg);
+    chat.messages.push({ role: 'assistant', content: errMsg });
+    saveChats();
+    showToast('Gagal: ' + err.message, 'error');
+  } finally {
+    state.isStreaming = false;
+    btnSend.disabled  = false;
+    userInput.focus();
+  }
+}
+
+// ─── INPUT HANDLING ───────────────────────────────────────────────────────────
+btnSend.addEventListener('click', sendMessage);
+userInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+userInput.addEventListener('input', () => { autoResize(); charCount.textContent = userInput.value.length; });
+
+function autoResize() {
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 180) + 'px';
+}
+
+// ─── SUGGESTION CARDS ─────────────────────────────────────────────────────────
+document.querySelectorAll('.suggestion-card').forEach(card => {
+  card.addEventListener('click', () => {
+    userInput.value = card.dataset.prompt;
+    autoResize();
+    charCount.textContent = userInput.value.length;
+    userInput.focus();
+  });
+});
+
+// ─── MODEL SELECT ─────────────────────────────────────────────────────────────
+modelSelect.addEventListener('change', () => {
+  localStorage.setItem('nyxai_model', modelSelect.value);
+  showToast('✓ Model: ' + modelSelect.options[modelSelect.selectedIndex].text);
+});
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = 'default') {
+  clearTimeout(toastTimer);
+  toast.textContent = msg;
+  toast.className = 'show ' + (type === 'error' ? 'error' : type === 'success' ? 'success' : '');
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
