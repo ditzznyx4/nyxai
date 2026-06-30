@@ -848,4 +848,559 @@
     background: none;
     border: none;
     color: var(--text-faint);
-    
+    cursor: pointer;
+    padding: 3px;
+    display: flex;
+    border-radius: 5px;
+    transition: color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-logout:hover { color: var(--red-bright); }
+
+  /* Streaming cursor */
+  .streaming::after {
+    content: '▋';
+    color: var(--red);
+    animation: blink 0.7s step-end infinite;
+    margin-left: 2px;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── SLIDE-UP ENTRY (dari login) ─── -->
+<div id="page-entry-overlay" style="position:fixed;inset:0;background:#0A0A0A;z-index:999;pointer-events:none;opacity:1;transition:opacity 0.5s ease;"></div>
+
+<!-- ─── SIDEBAR ─── -->
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">✦</div>
+      <span class="logo-text">Nyx<span>AI</span></span>
+    </a>
+  </div>
+
+  <button class="btn-new" id="btn-new-chat">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Obrolan Baru
+  </button>
+
+  <div id="chat-list">
+    <!-- Populated by JS -->
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="user-badge" id="user-badge">
+      <div class="user-badge-avatar">👤</div>
+      <span class="user-badge-name" id="badge-username">...</span>
+      <button class="btn-logout" id="btn-logout" title="Keluar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="model-label">Model AI</div>
+    <select class="model-selector" id="model-select">
+      <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek Chat V3 (Free)</option>
+      <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (Free)</option>
+      <option value="meta-llama/llama-4-scout:free">Llama 4 Scout (Free)</option>
+      <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
+      <option value="qwen/qwen3-235b-a22b:free">Qwen3 235B (Free)</option>
+      <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+      <option value="openai/gpt-4o">GPT-4o</option>
+      <option value="google/gemini-pro-1.5">Gemini Pro 1.5</option>
+    </select>
+  </div>
+</aside>
+
+<!-- ─── MAIN ─── -->
+<main id="main">
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <button class="btn-toggle-sidebar" id="btn-toggle-sidebar" title="Toggle Sidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span id="topbar-title">Pilih obrolan atau buat yang baru</span>
+    <div class="status-dot" id="status-dot"></div>
+  </div>
+
+  <!-- CHAT DISPLAY AREA -->
+  <div id="chat-area">
+    <div id="welcome">
+      <div class="welcome-icon">✦</div>
+      <div class="welcome-title">Halo, aku <span>NyxAI</span></div>
+      <div class="welcome-sub">AI asisten yang siap membantu kamu. Tanya apa saja — coding, nulis, analisa, atau sekedar ngobrol.</div>
+      <div class="suggestion-grid" id="suggestion-grid">
+        <div class="suggestion-card" data-prompt="Jelaskan konsep API REST dengan contoh sederhana">
+          <div class="suggestion-card-icon">🔗</div>
+          <div class="suggestion-card-text">Jelaskan konsep API REST dengan contoh</div>
+        </div>
+        <div class="suggestion-card" data-prompt="Buatkan script Python untuk membaca file CSV dan menampilkan statistik dasarnya">
+          <div class="suggestion-card-icon">🐍</div>
+          <div class="suggestion-card-text">Script Python baca file CSV & statistik</div>
+        </div>
+        <div class="suggestion-card" data-prompt="Apa saja tips menulis artikel blog yang menarik dan SEO-friendly?">
+          <div class="suggestion-card-icon">✍️</div>
+          <div class="suggestion-card-text">Tips menulis artikel blog yang SEO-friendly</div>
+        </div>
+        <div class="suggestion-card" data-prompt="Buat rencana belajar pemrograman web dari nol dalam 3 bulan">
+          <div class="suggestion-card-icon">🗺️</div>
+          <div class="suggestion-card-text">Rencana belajar web dev dari nol 3 bulan</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUT AREA -->
+  <div id="input-area">
+    <div class="input-wrapper">
+      <textarea id="user-input" placeholder="Ketik pesan kamu di sini... (Enter kirim, Shift+Enter baris baru)" rows="1"></textarea>
+      <button class="btn-send" id="btn-send" title="Kirim pesan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+    <div class="input-footer">
+      <span class="input-hint">⏎ Kirim · ⇧⏎ Baris baru</span>
+      <span id="char-count">0</span>
+    </div>
+  </div>
+</main>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const API_BASE = 'http://localhost:3000';
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const state = {
+  token:        localStorage.getItem('nyxai_token') || '',
+  username:     localStorage.getItem('nyxai_username') || '',
+  chats:        JSON.parse(localStorage.getItem('nyxai_chats') || '[]'),
+  activeChatId: null,
+  isStreaming:  false,
+  sidebarOpen:  true,
+};
+
+// ─── DOM REFS ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const sidebar       = $('sidebar');
+const btnToggle     = $('btn-toggle-sidebar');
+const btnNewChat    = $('btn-new-chat');
+const chatList      = $('chat-list');
+const chatArea      = $('chat-area');
+const welcome       = $('welcome');
+const userInput     = $('user-input');
+const btnSend       = $('btn-send');
+const modelSelect   = $('model-select');
+const topbarTitle   = $('topbar-title');
+const statusDot     = $('status-dot');
+const charCount     = $('char-count');
+const toast         = $('toast');
+const badgeUsername = $('badge-username');
+const btnLogout     = $('btn-logout');
+const entryOverlay  = $('page-entry-overlay');
+
+// ─── ENTRY ANIMATION (slide up dari login) ────────────────────────────────────
+window.addEventListener('load', () => {
+  document.body.classList.add('entry-anim');
+  setTimeout(() => {
+    entryOverlay.style.opacity = '0';
+    setTimeout(() => entryOverlay.remove(), 520);
+  }, 80);
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+async function init() {
+  // Cek token valid
+  if (!state.token) {
+    window.location.href = '/Login.html';
+    return;
+  }
+  try {
+    const res  = await fetch(`${API_BASE}/api/verify`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    const data = await res.json();
+    if (!res.ok || !data.valid) { doLogout(); return; }
+    state.username = data.username;
+    localStorage.setItem('nyxai_username', data.username);
+  } catch {
+    // Server mungkin off, lanjut dengan data lokal saja
+  }
+
+  badgeUsername.textContent = state.username || 'User';
+
+  const savedModel = localStorage.getItem('nyxai_model');
+  if (savedModel) modelSelect.value = savedModel;
+
+  renderSidebar();
+  if (state.chats.length > 0) loadChat(state.chats[0].id);
+}
+
+// ─── LOGOUT ───────────────────────────────────────────────────────────────────
+async function doLogout() {
+  try {
+    await fetch(`${API_BASE}/api/logout`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+  } catch { /* offline ok */ }
+  localStorage.removeItem('nyxai_token');
+  localStorage.removeItem('nyxai_username');
+  window.location.href = '/Login.html';
+}
+
+btnLogout.addEventListener('click', () => {
+  if (confirm('Yakin ingin keluar dari NyxAI?')) doLogout();
+});
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+btnToggle.addEventListener('click', () => {
+  if (window.innerWidth <= 640) {
+    sidebar.classList.toggle('open');
+  } else {
+    state.sidebarOpen = !state.sidebarOpen;
+    sidebar.classList.toggle('collapsed', !state.sidebarOpen);
+  }
+});
+
+function renderSidebar() {
+  chatList.innerHTML = '';
+  if (state.chats.length === 0) {
+    chatList.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-faint);text-align:center;">Belum ada obrolan</div>';
+    return;
+  }
+
+  const now = Date.now();
+  const ONE_DAY = 86400000;
+  const groups = { 'Hari Ini': [], 'Kemarin': [], 'Lebih Lama': [] };
+
+  state.chats.forEach(chat => {
+    const age = now - chat.updatedAt;
+    if (age < ONE_DAY) groups['Hari Ini'].push(chat);
+    else if (age < 2 * ONE_DAY) groups['Kemarin'].push(chat);
+    else groups['Lebih Lama'].push(chat);
+  });
+
+  Object.entries(groups).forEach(([label, chats]) => {
+    if (chats.length === 0) return;
+    const lbl = document.createElement('div');
+    lbl.className = 'chat-section-label';
+    lbl.textContent = label;
+    chatList.appendChild(lbl);
+
+    chats.forEach(chat => {
+      const item = document.createElement('div');
+      item.className = 'chat-item' + (chat.id === state.activeChatId ? ' active' : '');
+      item.dataset.id = chat.id;
+      item.innerHTML = `
+        <svg class="chat-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span class="chat-item-title">${escHtml(chat.title)}</span>
+        <button class="chat-item-del" title="Hapus obrolan" data-id="${chat.id}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+        </button>
+      `;
+      item.addEventListener('click', e => {
+        if (e.target.closest('.chat-item-del')) {
+          deleteChat(chat.id);
+        } else {
+          loadChat(chat.id);
+        }
+      });
+      chatList.appendChild(item);
+    });
+  });
+}
+
+// ─── CHAT MANAGEMENT ─────────────────────────────────────────────────────────
+function newChat() {
+  const id = 'chat_' + Date.now();
+  const chat = {
+    id,
+    title:     'Obrolan Baru',
+    messages:  [],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  state.chats.unshift(chat);
+  saveChats();
+  loadChat(id);
+}
+
+function loadChat(id) {
+  state.activeChatId = id;
+  const chat = getChat(id);
+  if (!chat) return;
+  topbarTitle.textContent = chat.title;
+  renderMessages(chat.messages);
+  renderSidebar();
+  userInput.focus();
+}
+
+function getChat(id) { return state.chats.find(c => c.id === id); }
+
+function deleteChat(id) {
+  state.chats = state.chats.filter(c => c.id !== id);
+  if (state.activeChatId === id) {
+    state.activeChatId = null;
+    chatArea.innerHTML = '';
+    chatArea.appendChild(welcome);
+    welcome.style.display = 'flex';
+    topbarTitle.textContent = 'Pilih obrolan atau buat yang baru';
+  }
+  saveChats();
+  renderSidebar();
+  showToast('🗑️ Obrolan dihapus', 'error');
+}
+
+function saveChats() {
+  const trimmed = state.chats.slice(0, 50).map(c => ({
+    ...c, messages: c.messages.slice(-40)
+  }));
+  try {
+    localStorage.setItem('nyxai_chats', JSON.stringify(trimmed));
+  } catch {
+    state.chats = state.chats.slice(0, 20);
+    localStorage.setItem('nyxai_chats', JSON.stringify(state.chats));
+  }
+}
+
+btnNewChat.addEventListener('click', newChat);
+
+// ─── RENDER MESSAGES ─────────────────────────────────────────────────────────
+function renderMessages(messages) {
+  chatArea.innerHTML = '';
+  if (messages.length === 0) {
+    chatArea.appendChild(welcome);
+    welcome.style.display = 'flex';
+    return;
+  }
+  messages.forEach(msg => appendMessage(msg.role, msg.content));
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function appendMessage(role, content, streaming = false) {
+  if (welcome.parentNode === chatArea) chatArea.removeChild(welcome);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap fade-in ' + (role === 'user' ? 'user' : 'assistant');
+
+  const roleLabel = document.createElement('div');
+  roleLabel.className = 'msg-role';
+  roleLabel.textContent = role === 'user' ? `🧑 ${state.username || 'Kamu'}` : '✦ NyxAI';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble' + (streaming ? ' streaming' : '');
+
+  if (role === 'assistant') {
+    bubble.innerHTML = parseMarkdown(content);
+    bubble.querySelectorAll('pre').forEach(pre => {
+      const btn = document.createElement('button');
+      btn.className = 'copy-code-btn';
+      btn.textContent = 'Salin';
+      btn.addEventListener('click', () => {
+        const code = pre.querySelector('code');
+        navigator.clipboard.writeText(code ? code.textContent : pre.textContent).then(() => {
+          btn.textContent = '✓ Disalin!';
+          setTimeout(() => btn.textContent = 'Salin', 1500);
+        });
+      });
+      pre.style.position = 'relative';
+      pre.appendChild(btn);
+    });
+  } else {
+    bubble.textContent = content;
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'msg-action-btn';
+  copyBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Salin';
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(content).then(() => {
+      copyBtn.textContent = '✓ Disalin';
+      setTimeout(() => copyBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Salin', 1500);
+    });
+  });
+  actions.appendChild(copyBtn);
+
+  wrap.appendChild(roleLabel);
+  wrap.appendChild(bubble);
+  if (!streaming) wrap.appendChild(actions);
+
+  chatArea.appendChild(wrap);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return { wrap, bubble };
+}
+
+function showTypingIndicator() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap fade-in assistant';
+  wrap.id = 'typing-indicator';
+  wrap.innerHTML = `
+    <div class="msg-role">✦ NyxAI</div>
+    <div class="typing-indicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `;
+  if (welcome.parentNode === chatArea) chatArea.removeChild(welcome);
+  chatArea.appendChild(wrap);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  const el = $('typing-indicator');
+  if (el) el.remove();
+}
+
+// ─── MARKDOWN PARSER ─────────────────────────────────────────────────────────
+function parseMarkdown(text) {
+  if (!text) return '';
+  let html = escHtml(text);
+
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
+  });
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  html = html.replace(/^[-*+] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
+
+  const lines = html.split('\n');
+  const result = [];
+  let inPre = false;
+  let buf = [];
+
+  for (const line of lines) {
+    if (line.startsWith('<pre>')) inPre = true;
+    if (inPre) { result.push(line); if (line.includes('</pre>')) inPre = false; continue; }
+    if (line.startsWith('<h') || line.startsWith('<ul') || line.startsWith('<ol') || line.startsWith('<blockquote') || line.startsWith('<hr')) {
+      if (buf.length) { result.push('<p>' + buf.join(' ') + '</p>'); buf = []; }
+      result.push(line);
+    } else if (line.trim() === '') {
+      if (buf.length) { result.push('<p>' + buf.join(' ') + '</p>'); buf = []; }
+    } else {
+      buf.push(line);
+    }
+  }
+  if (buf.length) result.push('<p>' + buf.join(' ') + '</p>');
+  return result.join('\n');
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── SEND MESSAGE (via backend /api/chat) ─────────────────────────────────────
+async function sendMessage() {
+  if (state.isStreaming) return;
+  const text = userInput.value.trim();
+  if (!text) return;
+  if (!state.token) { window.location.href = '/Login.html'; return; }
+
+  if (!state.activeChatId) newChat();
+
+  const chat = getChat(state.activeChatId);
+  if (!chat) return;
+
+  chat.messages.push({ role: 'user', content: text });
+  chat.updatedAt = Date.now();
+
+  if (chat.title === 'Obrolan Baru' && chat.messages.length === 1) {
+    chat.title = text.slice(0, 45) + (text.length > 45 ? '…' : '');
+    topbarTitle.textContent = chat.title;
+  }
+
+  appendMessage('user', text);
+  userInput.value = '';
+  autoResize();
+  charCount.textContent = '0';
+  saveChats();
+  renderSidebar();
+
+  showTypingIndicator();
+  state.isStreaming = true;
+  btnSend.disabled = true;
+  statusDot.classList.remove('offline');
+
+  try {
+    const model    = modelSelect.value;
+    const messages = chat.messages.slice(-20);
+
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({ model, messages, max_tokens: 4096, temperature: 0.7 }),
+    });
+
+    if (res.status === 401) { doLogout(); return; }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP ${res.status}`);
+    }
+
+    removeTypingIndicator();
+
+    const { wrap, bubble } = appendMessage('assistant', '', true);
+    let fullContent = '';
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+
+      for (const line of lines) {
+        const data = line.replace('data: ', '');
+        if (data === '[DONE]') continue;
+        try {
+          const json  = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullContent += delta;
+            bubble.innerHTML = parseMarkdown(fullContent);
+            bubble.classList.add('streaming');
+            bubble.querySelectorAll('pre').forEach(pre => {
+              if (!pre.querySelector('.copy-code-btn')) {
+                const btn = document.createElement('button');
+                btn.className = 'copy-code-btn';
+                btn.textContent = 'Salin';
+                btn.addEventListener('click', () => {
+                  const code = pre.querySelector('code');
+                  navigator.clipboard.writeText(code ? code.textContent :
