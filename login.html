@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NyxAI — Login</title>
+<style>
+/* ── RESET ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:       #1a1a1e;
+  --card:     #242428;
+  --card2:    #2a2a2f;
+  --input:    #313138;
+  --border:   #3a3a42;
+  --red:      #c0392b;
+  --red-b:    #e74c3c;
+  --red-glow: rgba(192,57,43,.35);
+  --red-dim:  rgba(192,57,43,.12);
+  --text:     #f0f0f0;
+  --muted:    #888;
+  --faint:    #555;
+  --radius:   14px;
+  --font:     'Inter',system-ui,sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+html,body{height:100%;overflow:hidden}
+
+body{
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--text);
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;
+  position:relative;
+}
+
+/* ── BACKGROUND PARTICLES ── */
+.bg-orb{
+  position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;
+}
+.bg-orb-1{
+  width:400px;height:400px;
+  background:radial-gradient(circle,rgba(192,57,43,.15) 0%,transparent 70%);
+  top:-100px;left:-100px;
+}
+.bg-orb-2{
+  width:300px;height:300px;
+  background:radial-gradient(circle,rgba(192,57,43,.08) 0%,transparent 70%);
+  bottom:-80px;right:-80px;
+}
+
+/* ── SCENE / STAGE ── */
+#scene{
+  position:relative;z-index:1;
+  width:100%;max-width:420px;
+  perspective:1200px;
+  padding:20px;
+}
+
+/* ── CARD ── */
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:40px 36px 36px;
+  box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.04);
+  position:relative;
+  overflow:hidden;
+}
+
+.card::before{
+  content:'';
+  position:absolute;top:0;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,var(--red),transparent);
+  opacity:.7;
+}
+
+/* ── LOGO ── */
+.logo-wrap{
+  display:flex;flex-direction:column;align-items:center;
+  margin-bottom:28px;gap:14px;
+}
+
+.logo-avatar{
+  width:72px;height:72px;
+  background:linear-gradient(135deg,#c0392b 0%,#6b0000 100%);
+  border-radius:22px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:32px;
+  box-shadow:0 0 40px var(--red-glow),0 8px 24px rgba(0,0,0,.4);
+  position:relative;
+  animation:avatarPulse 3s ease-in-out infinite;
+}
+
+@keyframes avatarPulse{
+  0%,100%{box-shadow:0 0 32px var(--red-glow),0 8px 24px rgba(0,0,0,.4)}
+  50%{box-shadow:0 0 56px var(--red-glow),0 8px 32px rgba(0,0,0,.5)}
+}
+
+.logo-title{
+  font-size:22px;font-weight:700;
+  letter-spacing:-0.5px;
+  color:var(--text);
+  text-align:center;
+}
+.logo-title span{color:var(--red-b)}
+
+/* ── FIELD ── */
+.field{margin-bottom:18px}
+
+.field-label{
+  display:block;
+  font-size:11.5px;font-weight:600;
+  color:var(--muted);
+  text-transform:uppercase;letter-spacing:.7px;
+  margin-bottom:8px;
+}
+
+.field-input{
+  width:100%;
+  background:var(--input);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  color:var(--text);
+  font-size:14.5px;
+  font-family:var(--font);
+  padding:13px 16px;
+  transition:border-color .2s,box-shadow .2s;
+  outline:none;
+}
+.field-input::placeholder{color:var(--faint)}
+.field-input:focus{
+  border-color:var(--red);
+  box-shadow:0 0 0 3px var(--red-dim);
+}
+
+/* ── BUTTONS ── */
+.btn-row{display:flex;gap:10px;margin-top:8px}
+
+.btn{
+  flex:1;
+  padding:13px 20px;
+  border-radius:12px;
+  font-size:14.5px;font-weight:600;
+  font-family:var(--font);
+  cursor:pointer;
+  border:none;
+  transition:all .2s;
+  position:relative;overflow:hidden;
+}
+
+.btn-primary{
+  background:linear-gradient(135deg,var(--red),#8b0000);
+  color:#fff;
+  box-shadow:0 4px 18px var(--red-glow);
+}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 28px var(--red-glow)}
+.btn-primary:active{transform:translateY(0)}
+
+.btn-secondary{
+  background:var(--card2);
+  color:var(--muted);
+  border:1.5px solid var(--border);
+}
+.btn-secondary:hover{border-color:var(--red);color:var(--red-b);background:var(--red-dim)}
+
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+
+/* ── ERROR MSG ── */
+.error-msg{
+  font-size:12.5px;
+  color:var(--red-b);
+  text-align:center;
+  min-height:20px;
+  margin-bottom:10px;
+  font-weight:500;
+  opacity:0;
+  transition:opacity .3s;
+}
+.error-msg.show{opacity:1}
+
+/* ── PAGE OVERLAY (transition) ── */
+#overlay{
+  position:fixed;inset:0;z-index:999;
+  pointer-events:none;
+}
+
+/* Capcut "masuk" — lingkaran kecil di tengah membesar */
+.overlay-circle{
+  position:fixed;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(0);
+  width:20px;height:20px;
+  background:var(--bg);
+  border-radius:50%;
+  z-index:999;
+  pointer-events:none;
+  transition:none;
+}
+.overlay-circle.expand{
+  animation:circleExpand .65s cubic-bezier(.4,0,.2,1) forwards;
+}
+@keyframes circleExpand{
+  0%{transform:translate(-50%,-50%) scale(0);opacity:1}
+  100%{transform:translate(-50%,-50%) scale(120);opacity:1}
+}
+
+/* Slide kiri–kanan (untuk transisi antar panel) */
+.slide-exit-left{animation:slideExitLeft .38s cubic-bezier(.4,0,.2,1) forwards}
+.slide-enter-right{animation:slideEnterRight .38s cubic-bezier(.4,0,.2,1) forwards}
+.slide-exit-right{animation:slideExitRight .38s cubic-bezier(.4,0,.2,1) forwards}
+.slide-enter-left{animation:slideEnterLeft .38s cubic-bezier(.4,0,.2,1) forwards}
+.slide-enter-up{animation:slideEnterUp .45s cubic-bezier(.4,0,.2,1) forwards}
+.fade-out-anim{animation:fadeOutAnim 1s cubic-bezier(.4,0,.2,1) forwards}
+
+@keyframes slideExitLeft{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(-60px)}}
+@keyframes slideEnterRight{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideExitRight{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(60px)}}
+@keyframes slideEnterLeft{from{opacity:0;transform:translateX(-60px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideEnterUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeOutAnim{from{opacity:1}to{opacity:0}}
+
+/* ── LOADING SPINNER INSIDE BUTTON ── */
+.spinner{
+  display:inline-block;
+  width:14px;height:14px;
+  border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+  vertical-align:middle;
+  margin-right:6px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── BACK BUTTON (register) ── */
+.btn-back{
+  position:absolute;
+  top:18px;right:18px;
+  background:var(--card2);
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  color:var(--muted);
+  font-size:12.5px;font-weight:600;
+  font-family:var(--font);
+  padding:7px 14px;
+  cursor:pointer;
+  transition:all .2s;
+  z-index:10;
+}
+.btn-back:hover{border-color:var(--red);color:var(--red-b)}
+
+/* ── SUCCESS BOX ── */
+.success-msg{
+  font-size:12.5px;
+  color:#2ecc71;
+  text-align:center;
+  min-height:20px;
+  margin-bottom:10px;
+  font-weight:500;
+  opacity:0;
+  transition:opacity .3s;
+}
+.success-msg.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+<div id="overlay"></div>
+
+<div id="scene">
+
+  <!-- ── LOGIN PANEL ── -->
+  <div id="panel-login" class="card">
+    <div class="logo-wrap">
+      <div class="logo-avatar">✦</div>
+      <div class="logo-title">NYX AI — <span>LOGIN</span></div>
+    </div>
+
+    <div id="login-error" class="error-msg"></div>
+
+    <div class="field">
+      <label class="field-label" for="login-user">Username</label>
+      <input class="field-input" id="login-user" type="text" placeholder="Username" autocomplete="username" spellcheck="false"/>
+    </div>
+    <div class="field">
+      <label class="field-label" for="login-pass">Password</label>
+      <input class="field-input" id="login-pass" type="password" placeholder="Password" autocomplete="current-password"/>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-signin">Sign In</button>
+      <button class="btn btn-secondary" id="btn-go-register">Sign Up</button>
+    </div>
+  </div>
+
+  <!-- ── REGISTER PANEL (hidden) ── -->
+  <div id="panel-register" class="card" style="display:none">
+    <button class="btn-back" id="btn-back">✕ Kembali</button>
+
+    <div class="logo-wrap" style="margin-top:8px">
+      <div class="logo-avatar">✦</div>
+      <div class="logo-title">NYX AI — <span>DAFTAR</span></div>
+    </div>
+
+    <div id="reg-error" class="error-msg"></div>
+    <div id="reg-success" class="success-msg"></div>
+
+    <div class="field">
+      <label class="field-label" for="reg-user">Username</label>
+      <input class="field-input" id="reg-user" type="text" placeholder="Username" autocomplete="username" spellcheck="false"/>
+    </div>
+    <div class="field">
+      <label class="field-label" for="reg-pass">Password</label>
+      <input class="field-input" id="reg-pass" type="password" placeholder="Password" autocomplete="new-password"/>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-signup">Sign Up</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- CAPCUT CIRCLE (untuk animasi keluar) -->
+<div class="overlay-circle" id="capcut-circle"></div>
+
+<script>
+// ─── REFS ─────────────────────────────────────────────────────────────────────
+const panelLogin    = document.getElementById('panel-login');
+const panelReg      = document.getElementById('panel-register');
+const loginError    = document.getElementById('login-error');
+const regError      = document.getElementById('reg-error');
+const regSuccess    = document.getElementById('reg-success');
+const loginUser     = document.getElementById('login-user');
+const loginPass     = document.getElementById('login-pass');
+const regUser       = document.getElementById('reg-user');
+const regPass       = document.getElementById('reg-pass');
+const btnSignin     = document.getElementById('btn-signin');
+const btnGoReg      = document.getElementById('btn-go-register');
+const btnBack       = document.getElementById('btn-back');
+const btnSignup     = document.getElementById('btn-signup');
+const capcutCircle  = document.getElementById('capcut-circle');
+
+const API = window.location.origin; // http://localhost:3000
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function showError(el, msg) {
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function clearMsg(el) {
+  el.classList.remove('show');
+  setTimeout(() => el.textContent = '', 300);
+}
+function showSuccess(el, msg) {
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function setLoading(btn, loading, label) {
+  if (loading) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> ${label || 'Memproses...'}`;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = label;
+  }
+}
+
+// ─── TRANSITION: Login → Register (slide kiri) ───────────────────────────────
+btnGoReg.addEventListener('click', () => {
+  clearMsg(loginError);
+  panelLogin.classList.add('slide-exit-left');
+  setTimeout(() => {
+    panelLogin.style.display = 'none';
+    panelLogin.classList.remove('slide-exit-left');
+    panelReg.style.display = 'block';
+    panelReg.classList.add('slide-enter-right');
+    setTimeout(() => panelReg.classList.remove('slide-enter-right'), 400);
+    regUser.focus();
+  }, 360);
+});
+
+// ─── TRANSITION: Register → Login (slide kanan) ──────────────────────────────
+function goBackToLogin() {
+  clearMsg(regError);
+  clearMsg(regSuccess);
+  panelReg.classList.add('slide-exit-right');
+  setTimeout(() => {
+    panelReg.style.display = 'none';
+    panelReg.classList.remove('slide-exit-right');
+    panelLogin.style.display = 'block';
+    panelLogin.classList.add('slide-enter-left');
+    setTimeout(() => panelLogin.classList.remove('slide-enter-left'), 400);
+    loginUser.focus();
+  }, 360);
+}
+btnBack.addEventListener('click', goBackToLogin);
+
+// ─── Capcut "masuk" animation → expand circle ────────────────────────────────
+function capcutExit(callback) {
+  capcutCircle.classList.add('expand');
+  setTimeout(callback, 620);
+}
+
+// ─── REGISTER ─────────────────────────────────────────────────────────────────
+btnSignup.addEventListener('click', doRegister);
+regPass.addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+
+async function doRegister() {
+  clearMsg(regError);
+  clearMsg(regSuccess);
+  const username = regUser.value.trim();
+  const password = regPass.value;
+  if (!username || !password) { showError(regError, 'Isi semua kolom.'); return; }
+
+  setLoading(btnSignup, true, '');
+  try {
+    const res  = await fetch(`${API}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(regError, data.error); return; }
+
+    showSuccess(regSuccess, '✅ Akun dibuat! Mengalihkan ke login...');
+    regUser.value = '';
+    regPass.value = '';
+    setTimeout(() => goBackToLogin(), 1400);
+  } catch(err) {
+    showError(regError, 'Gagal terhubung ke server. Pastikan index.js berjalan.');
+  } finally {
+    setLoading(btnSignup, false, 'Sign Up');
+  }
+}
+
+// ─── LOGIN ────────────────────────────────────────────────────────────────────
+btnSignin.addEventListener('click', doLogin);
+loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  clearMsg(loginError);
+  const username = loginUser.value.trim();
+  const password = loginPass.value;
+  if (!username || !password) { showError(loginError, 'Isi semua kolom.'); return; }
+
+  setLoading(btnSignin, true, '');
+  try {
+    const res  = await fetch(`${API}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Already logged in di device lain
+      if (data.code === 'ALREADY_LOGGED_IN') {
+        showError(loginError, 'Username And Password Already Use');
+      } else {
+        showError(loginError, data.error);
+      }
+      setLoading(btnSignin, false, 'Sign In');
+      return;
+    }
+
+    // Simpan token
+    localStorage.setItem('nyxai_token',    data.token);
+    localStorage.setItem('nyxai_username', data.username);
+
+    // Animasi success: slide kiri → panel loading → fade out → masuk ke AI
+    panelLogin.classList.add('slide-exit-left');
+
+    setTimeout(() => {
+      // Capcut expand → gelap
+      capcutExit(() => {
+        // Fade out seluruh halaman lalu redirect ke nyxai.html
+        document.body.style.transition = 'opacity 1s';
+        document.body.style.opacity = '0';
+        setTimeout(() => {
+          window.location.href = '/nyxai.html';
+        }, 950);
+      });
+    }, 360);
+
+  } catch(err) {
+    showError(loginError, 'Gagal terhubung ke server. Pastikan index.js berjalan.');
+    setLoading(btnSignin, false, 'Sign In');
+  }
+}
+
+// ─── Auto-focus ───────────────────────────────────────────────────────────────
+window.addEventListener('load', () => loginUser.focus());
+</script>
+</body>
+</html>
