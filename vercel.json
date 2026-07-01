@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/Login.html" }
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/",         "destination": "/Login.html"   }
   ],
   "headers": [
     {
