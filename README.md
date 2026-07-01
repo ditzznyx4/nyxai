@@ -1,2 +1,0 @@
-# nyxai
-NYX AI Test 
