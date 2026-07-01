@@ -1,0 +1,9 @@
+{
+  "name": "nyxai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NyxAI — Premium AI Chat powered by OpenRouter on Vercel",
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}
