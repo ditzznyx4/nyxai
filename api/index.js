@@ -1,42 +1,48 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  NyxAI — Single index.js (Vercel Edge Runtime)
+//  Routes: /api/register /api/login /api/logout /api/verify /api/chat
+//  Storage: Upstash Redis via REST (KV_REST_API_URL + KV_REST_API_TOKEN)
+//  AI: OpenRouter (OPENROUTER_KEY) — uses deepseek/deepseek-chat-v3-0324 FREE
+// ─────────────────────────────────────────────────────────────────────────────
 export const config = { runtime: 'edge' };
 
-const KV_URL          = process.env.KV_REST_API_URL;
-const KV_TOKEN        = process.env.KV_REST_API_TOKEN;
-const OPENROUTER_KEY  = process.env.OPENROUTER_KEY;
-const SESSION_TTL     = 60 * 60 * 24 * 7; // 7 hari (detik)
+// ── ENV ──────────────────────────────────────────────────────────────────────
+const KV_URL   = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const OR_KEY   = process.env.OPENROUTER_KEY;
+const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
 
+// ── SAFE FREE MODEL (always works on OpenRouter free tier) ──────────────────
+const DEFAULT_MODEL = 'deepseek/deepseek-chat-v3-0324:free';
+
+// ── CORS / RESPONSE HELPERS ──────────────────────────────────────────────────
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
 };
+const J = (body, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS },
+  });
+const E = (msg, status = 400) => J({ error: msg }, status);
 
-const JSON_HEADERS = { 'Content-Type': 'application/json', ...CORS };
-const SSE_HEADERS  = {
-  'Content-Type':      'text/event-stream',
-  'Cache-Control':     'no-cache',
-  'Connection':        'keep-alive',
-  'X-Accel-Buffering': 'no',
-  ...CORS,
-};
-
-const ok   = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
-const fail = (msg,  status = 400) => new Response(JSON.stringify({ error: msg }), { status, headers: JSON_HEADERS });
-
+// ── KV HELPERS (Upstash REST) ────────────────────────────────────────────────
 async function kvGet(key) {
-  const res  = await fetch(`${KV_URL}/get/${encodeURIComponent(key)}`, {
+  const r = await fetch(`${KV_URL}/get/${encodeURIComponent(key)}`, {
     headers: { Authorization: `Bearer ${KV_TOKEN}` },
   });
-  const data = await res.json();
-  if (!data.result) return null;
-  try { return JSON.parse(data.result); } catch { return data.result; }
+  const d = await r.json();
+  if (!d.result) return null;
+  try { return JSON.parse(d.result); } catch { return d.result; }
 }
 
-async function kvSet(key, value, exSeconds) {
-  const encoded = encodeURIComponent(JSON.stringify(value));
-  const url     = exSeconds
-    ? `${KV_URL}/set/${encodeURIComponent(key)}/${encoded}?EX=${exSeconds}`
-    : `${KV_URL}/set/${encodeURIComponent(key)}/${encoded}`;
+async function kvSet(key, value, ex) {
+  const v = encodeURIComponent(JSON.stringify(value));
+  const url = ex
+    ? `${KV_URL}/set/${encodeURIComponent(key)}/${v}?EX=${ex}`
+    : `${KV_URL}/set/${encodeURIComponent(key)}/${v}`;
   await fetch(url, { headers: { Authorization: `Bearer ${KV_TOKEN}` } });
 }
 
@@ -46,168 +52,202 @@ async function kvDel(key) {
   });
 }
 
-function randomHex(bytes) {
-  const arr = new Uint8Array(bytes);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+// ── CRYPTO HELPERS (Web Crypto — works on Edge) ──────────────────────────────
+function rndHex(n) {
+  const a = new Uint8Array(n);
+  crypto.getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-async function hashPassword(password, salt) {
-  const raw    = new TextEncoder().encode(salt + ':' + password);
-  const buf    = await crypto.subtle.digest('SHA-256', raw);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+async function hashPwd(password, salt) {
+  const raw = new TextEncoder().encode(salt + ':' + password);
+  const buf = await crypto.subtle.digest('SHA-256', raw);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+// ── AUTH HELPER ──────────────────────────────────────────────────────────────
 async function getSession(req) {
   const auth  = req.headers.get('authorization') || '';
-  const token = auth.replace('Bearer ', '').trim();
+  const token = auth.replace('Bearer ','').trim();
   if (!token) return null;
-  const session = await kvGet(`session:${token}`);
-  if (!session) return null;
-  return { ...session, token };
+  const s = await kvGet(`session:${token}`);
+  return s ? { ...s, token } : null;
 }
 
+// ── ROUTER ───────────────────────────────────────────────────────────────────
 export default async function handler(req) {
-  const url      = new URL(req.url);
-  const pathname = url.pathname;
-  const method   = req.method;
+  const url  = new URL(req.url);
+  const path = url.pathname;
+  const method = req.method;
 
   // CORS preflight
-  if (method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS });
-  }
+  if (method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
-  if (pathname === '/api/register' && method === 'POST') {
+  // ── POST /api/register ────────────────────────────────────────────────────
+  if (path === '/api/register' && method === 'POST') {
     try {
-      const { username, password } = await req.json();
+      const { username, password } = await req.json().catch(() => ({}));
+      if (!username || !password) return E('Username and password are required.');
+      if (username.length < 3)    return E('Username must be at least 3 characters.');
+      if (password.length < 4)    return E('Password must be at least 4 characters.');
+      if (!/^\w+$/.test(username)) return E('Username can only contain letters, numbers and underscore.');
 
-      if (!username || !password)     return fail('Username dan password wajib diisi.');
-      if (username.length < 3)        return fail('Username minimal 3 karakter.');
-      if (password.length < 4)        return fail('Password minimal 4 karakter.');
-      if (!/^\w+$/.test(username))    return fail('Username hanya boleh huruf, angka, dan underscore.');
+      const key  = `user:${username.toLowerCase()}`;
+      const exist = await kvGet(key);
+      if (exist) return E('Username already taken.', 409);
 
-      const key      = `user:${username.toLowerCase()}`;
-      const existing = await kvGet(key);
-      if (existing)  return fail('Username sudah digunakan.', 409);
+      const salt = rndHex(16);
+      const hash = await hashPwd(password, salt);
+      await kvSet(key, { username, passwordHash: hash, salt, createdAt: Date.now() });
 
-      const salt         = randomHex(16);
-      const passwordHash = await hashPassword(password, salt);
-
-      await kvSet(key, { username, passwordHash, salt, createdAt: Date.now() });
-
-      return ok({ success: true, message: 'Akun berhasil dibuat. Silakan login.' }, 201);
+      return J({ success: true, message: 'Account created. Please sign in.' }, 201);
     } catch (err) {
-      return fail('Kesalahan server: ' + err.message, 500);
+      return E('Server error: ' + err.message, 500);
     }
   }
 
-  if (pathname === '/api/login' && method === 'POST') {
+  // ── POST /api/login ───────────────────────────────────────────────────────
+  if (path === '/api/login' && method === 'POST') {
     try {
-      const { username, password } = await req.json();
-
-      if (!username || !password) return fail('Username dan password wajib diisi.');
+      const { username, password } = await req.json().catch(() => ({}));
+      if (!username || !password) return E('Username and password are required.');
 
       const user = await kvGet(`user:${username.toLowerCase()}`);
-      if (!user)  return fail('Username atau password salah.', 401);
+      if (!user) return E('Incorrect username or password.', 401);
 
-      const hash = await hashPassword(password, user.salt);
-      if (hash !== user.passwordHash) return fail('Username atau password salah.', 401);
+      const hash = await hashPwd(password, user.salt);
+      if (hash !== user.passwordHash) return E('Incorrect username or password.', 401);
 
-      // Cek session aktif (1 device per akun)
+      // Single-device check
       const activeToken = await kvGet(`active:${username.toLowerCase()}`);
       if (activeToken) {
-        const stillValid = await kvGet(`session:${activeToken}`);
-        if (stillValid) {
-          return fail('Username And Password Already Use', 403);
-        }
-        // Session lama sudah expired — lanjut login
+        const still = await kvGet(`session:${activeToken}`);
+        if (still) return E('Username And Password Already Use', 403);
       }
 
-      const token = randomHex(32);
+      const token = rndHex(32);
       await kvSet(`session:${token}`, { username: user.username, createdAt: Date.now() }, SESSION_TTL);
       await kvSet(`active:${username.toLowerCase()}`, token, SESSION_TTL);
 
-      return ok({ success: true, token, username: user.username });
+      return J({ success: true, token, username: user.username });
     } catch (err) {
-      return fail('Kesalahan server: ' + err.message, 500);
+      return E('Server error: ' + err.message, 500);
     }
   }
 
-  if (pathname === '/api/logout' && method === 'POST') {
+  // ── POST /api/logout ──────────────────────────────────────────────────────
+  if (path === '/api/logout' && method === 'POST') {
     try {
-      const session = await getSession(req);
-      if (!session) return fail('Unauthorized.', 401);
-
-      await kvDel(`session:${session.token}`);
-      await kvDel(`active:${session.username.toLowerCase()}`);
-
-      return ok({ success: true });
+      const s = await getSession(req);
+      if (!s) return E('Unauthorized.', 401);
+      await kvDel(`session:${s.token}`);
+      await kvDel(`active:${s.username.toLowerCase()}`);
+      return J({ success: true });
     } catch (err) {
-      return fail('Kesalahan server: ' + err.message, 500);
+      return E('Server error: ' + err.message, 500);
     }
   }
 
-  if (pathname === '/api/verify' && method === 'GET') {
+  // ── GET /api/verify ───────────────────────────────────────────────────────
+  if (path === '/api/verify') {
     try {
-      const session = await getSession(req);
-      if (!session) return fail('Sesi tidak valid. Silakan login ulang.', 401);
-
-      return ok({ valid: true, username: session.username });
+      const s = await getSession(req);
+      if (!s) return E('Session expired. Please sign in again.', 401);
+      return J({ valid: true, username: s.username });
     } catch (err) {
-      return fail('Kesalahan server: ' + err.message, 500);
+      return E('Server error: ' + err.message, 500);
     }
   }
 
-  if (pathname === '/api/chat' && method === 'POST') {
+  // ── POST /api/chat ────────────────────────────────────────────────────────
+  if (path === '/api/chat' && method === 'POST') {
     try {
       // Auth
-      const session = await getSession(req);
-      if (!session) return fail('Unauthorized. Silakan login ulang.', 401);
+      const s = await getSession(req);
+      if (!s) return E('Unauthorized. Please sign in again.', 401);
 
-      // Validate OpenRouter key
-      if (!OPENROUTER_KEY || OPENROUTER_KEY.includes('MASUKKAN')) {
-        return fail('OPENROUTER_KEY belum diset di Environment Variables Vercel.', 500);
+      // Key check
+      if (!OR_KEY || OR_KEY.includes('MASUKKAN')) {
+        return E('OPENROUTER_KEY is not configured on the server.', 500);
       }
 
       // Parse body
-      const { model, messages, temperature, max_tokens } = await req.json();
-      if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        return fail('Field messages wajib berupa array dan tidak boleh kosong.');
+      const body = await req.json().catch(() => null);
+      if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+        return E('messages array is required.');
       }
 
-      // Proxy stream ke OpenRouter
+      // ── FORCE safe free model — ignore client model string to avoid paid errors ──
+      // Map friendly names → actual free slugs
+      const MODEL_MAP = {
+        'nyx ai v3':              'deepseek/deepseek-chat-v3-0324:free',
+        'nyxai v3':               'deepseek/deepseek-chat-v3-0324:free',
+        'gemini flash 3':         'google/gemini-2.0-flash-exp:free',
+        'llama 4 scout':          'meta-llama/llama-4-scout:free',
+        'llama 3.3 70b':          'meta-llama/llama-3.3-70b-instruct:free',
+        'qwen3':                  'qwen/qwen3-235b-a22b:free',
+        // Pro models (require paid OR credits)
+        'chatgpt plus 5.5':       'openai/gpt-4o',
+        'chatgpt 4':              'openai/gpt-4',
+        'gemini pro 3':           'google/gemini-pro-1.5',
+        'claude sonnet 4.6':      'anthropic/claude-3.5-sonnet',
+      };
+
+      const clientModel = (body.model || '').toLowerCase().trim();
+      let model = MODEL_MAP[clientModel] || body.model || DEFAULT_MODEL;
+
+      // Safety net: if no :free suffix and not a known paid model → force free
+      const KNOWN_PAID = ['openai/','anthropic/','google/gemini-pro'];
+      const isPaid = KNOWN_PAID.some(p => model.startsWith(p));
+      if (!isPaid && !model.endsWith(':free')) {
+        model = model + ':free';
+      }
+
+      // Proxy to OpenRouter with streaming
       const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${OPENROUTER_KEY}`,
+          'Authorization': `Bearer ${OR_KEY}`,
           'HTTP-Referer':  'https://nyxai.vercel.app',
           'X-Title':       'NyxAI',
         },
         body: JSON.stringify({
-          model:       model       || 'deepseek/deepseek-chat-v3-0324:free',
-          messages:    messages.slice(-20),
+          model,
+          messages:    body.messages.slice(-24),
           stream:      true,
-          max_tokens:  max_tokens  || 4096,
-          temperature: temperature != null ? temperature : 0.7,
+          max_tokens:  body.max_tokens  || 4096,
+          temperature: body.temperature != null ? body.temperature : 0.7,
         }),
       });
 
       if (!upstream.ok || !upstream.body) {
-        const errText = await upstream.text().catch(() => '');
-        let errMsg = `OpenRouter error HTTP ${upstream.status}`;
-        try { errMsg = JSON.parse(errText).error?.message || errMsg; } catch {}
-        return fail(errMsg, 502);
+        let errMsg = `OpenRouter HTTP ${upstream.status}`;
+        try {
+          const t = await upstream.text();
+          const j = JSON.parse(t);
+          errMsg = j.error?.message || j.error || errMsg;
+        } catch {}
+        return E(errMsg, 502);
       }
 
-      // Forward stream langsung ke client
-      return new Response(upstream.body, { status: 200, headers: SSE_HEADERS });
+      // Stream SSE straight to client
+      return new Response(upstream.body, {
+        status: 200,
+        headers: {
+          'Content-Type':      'text/event-stream',
+          'Cache-Control':     'no-cache',
+          'Connection':        'keep-alive',
+          'X-Accel-Buffering': 'no',
+          ...CORS,
+        },
+      });
 
     } catch (err) {
-      return fail('Kesalahan server: ' + err.message, 500);
+      return E('Server error: ' + err.message, 500);
     }
   }
 
   // ── 404 ───────────────────────────────────────────────────────────────────
-  return fail('Endpoint tidak ditemukan.', 404);
-}
+  return E('Endpoint not found.', 404);
+  }
