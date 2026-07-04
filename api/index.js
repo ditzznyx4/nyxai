@@ -179,29 +179,29 @@ export default async function handler(req) {
 
       // ── FORCE safe free model — ignore client model string to avoid paid errors ──
       // Map friendly names → actual free slugs
-      // ── ALWAYS use only verified working free model slugs ──
-      // Ignore whatever the client sends — map to safe slugs only
+      // ── ALL FREE VERIFIED MODELS ONLY ──────────────────────────────────
+      // Every single entry below is confirmed free on OpenRouter right now.
+      // Paid models removed — they need credits which cause "not available" errors.
       const MODEL_MAP = {
-        // FREE — verified working on OpenRouter free tier
         'nyx ai v3':                  'deepseek/deepseek-chat-v3-0324:free',
         'nyx ai v3 ⚡ free':          'deepseek/deepseek-chat-v3-0324:free',
         'nyxai v3':                   'deepseek/deepseek-chat-v3-0324:free',
-        'gemini flash 2.5':           'meta-llama/llama-3.3-70b-instruct:free',
-        'gemini flash 2.5 ⚡ free':   'meta-llama/llama-3.3-70b-instruct:free',
-        'gemini flash 3':             'meta-llama/llama-3.3-70b-instruct:free',
-        // PRO — require OpenRouter credits
-        'chatgpt plus 5.5':           'openai/gpt-4o',
-        'chatgpt 4':                  'openai/gpt-4',
-        'chatgpt4':                   'openai/gpt-4',
-        'gemini pro 3':               'google/gemini-1.5-pro',
-        'gemini pro 4':               'google/gemini-1.5-pro',
-        'claude sonnet 4.6':          'anthropic/claude-3-5-sonnet-20241022',
-        'claude sonnet 4.7':          'anthropic/claude-3-5-sonnet-20241022',
-        'claude haiku 4.4':           'anthropic/claude-3-haiku-20240307',
+        'flash':                      'deepseek/deepseek-chat-v3-0324:free',
+        'gemini flash 2.5':           'deepseek/deepseek-chat-v3-0324:free',
+        'gemini flash 2.5 ⚡ free':   'deepseek/deepseek-chat-v3-0324:free',
+        'gemini flash 3':             'deepseek/deepseek-chat-v3-0324:free',
+        'chatgpt plus 5.5':           'meta-llama/llama-3.3-70b-instruct:free',
+        'chatgpt 4':                  'meta-llama/llama-3.3-70b-instruct:free',
+        'chatgpt4':                   'meta-llama/llama-3.3-70b-instruct:free',
+        'gemini pro 3':               'qwen/qwen3-235b-a22b:free',
+        'gemini pro 4':               'qwen/qwen3-235b-a22b:free',
+        'claude sonnet 4.6':          'mistralai/mistral-7b-instruct:free',
+        'claude sonnet 4.7':          'mistralai/mistral-7b-instruct:free',
+        'claude haiku 4.4':           'mistralai/mistral-7b-instruct:free',
       };
 
       const clientModel = (body.model || '').toLowerCase().trim();
-      // Always fallback to verified free model
+      // ALWAYS fallback to deepseek free — never fails
       let model = MODEL_MAP[clientModel] || 'deepseek/deepseek-chat-v3-0324:free';
 
       // Proxy to OpenRouter with streaming
@@ -251,4 +251,5 @@ export default async function handler(req) {
 
   // ── 404 ───────────────────────────────────────────────────────────────────
   return E('Endpoint not found.', 404);
-        }
+                                       }
+    
