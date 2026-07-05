@@ -114,7 +114,7 @@ export default async function handler(req) {
 
       // ── HARDCODE: always use deepseek free — most stable free model ──────
       // The :free suffix MUST be in the slug sent to OpenRouter
-      const MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+      const MODEL = 'deepseek/deepseek-v4-flash';
 
       const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
