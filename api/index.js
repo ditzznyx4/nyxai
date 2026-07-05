@@ -114,7 +114,7 @@ export default async function handler(req) {
 
       // ── HARDCODE: always use deepseek free — most stable free model ──────
       // The :free suffix MUST be in the slug sent to OpenRouter
-      const MODEL = 'deepseek/deepseek-chat-v3-0324';
+      const MODEL = 'qwen/qwen3-235b-a22b';
 
       const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
