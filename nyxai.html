@@ -1061,4 +1061,40 @@
 
             } catch (err) {
                 removeTyping();
-          
+          appendMessageUI('⚠ Error: ' + err.message, false);
+                chatSessions[currentChatId].messages.push({ text: '⚠ Error: ' + err.message, isUser: false });
+            } finally {
+                _busy = false;
+                btnSend.disabled = false;
+            }
+        }
+
+        btnSend.addEventListener('click', handleSend);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // --- FIX: BUTTON OBROLAN BARU (KOSONG TOTAL TANPA PENANDA MERAH SAMA SEKALI) ---
+        btnNewChat.addEventListener('click', () => {
+            currentChatId = null; // Reset ke mode room kosong
+
+            // Hapus semua penanda kelas merah aktif (Sesuai Permintaan)
+            chatList.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+
+            // Kosongkan gelembung balon chat pada UI layar
+            const activeBubbles = chatWrapper.querySelectorAll('.message-container');
+            activeBubbles.forEach(bubble => bubble.remove());
+
+            // Tampilkan kembali Welcome Screen Teks Utama NYX GPT
+            welcomeScreen.style.display = 'flex';
+
+            // Tutup sidebar otomatis
+            sidebar.classList.add('collapsed');
+            sidebar.classList.remove('open');
+        });
+    </script>
+</body>
+</html>
