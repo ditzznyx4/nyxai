@@ -114,22 +114,28 @@ export default async function handler(req) {
 
       // ── HARDCODE: always use deepseek free — most stable free model ──────
       // The :free suffix MUST be in the slug sent to OpenRouter
-      const MODEL = 'openai/gpt-4o';
+      const MODEL = 'qwen/qwen3-235b-a22b:free';
 
       const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
           'Authorization': `Bearer ${OR_KEY}`,
-          'HTTP-Referer':  'https://nyxai.vercel.app',
+          'HTTP-Referer':  'https://nyx-trial-ai.vercel.app',
           'X-Title':       'NyxAI',
         },
         body: JSON.stringify({
           model:       MODEL,
-          messages:    body.messages.slice(-20),
+          messages:    [
+            {
+              role: 'system',
+              content: 'You are NyxAI, a helpful, smart, and friendly AI assistant. Always respond in complete, well-structured answers. Never cut off mid-sentence. Use the same language as the user.'
+            },
+            ...body.messages.slice(-20)
+          ],
           stream:      true,
-          max_tokens:  4096,
-          temperature: 0.7,
+          max_tokens:  8192,
+          temperature: 0.75,
         }),
       });
 
@@ -148,4 +154,4 @@ export default async function handler(req) {
   }
 
   return E('Not found.', 404);
-  }
+        }
