@@ -1083,4 +1083,179 @@
             if (currentChatId === null) {
                 currentChatId = 'session_' + Date.now();
                 const title = query.length > 28 ? query.substring(0, 28) + '…' : query;
-                chatSessions
+                chatSessions[currentChatId] = { title, messages: [] };
+                const newItem = document.createElement('div');
+                newItem.classList.add('chat-item');
+                newItem.innerText = title;
+                newItem.setAttribute('data-id', currentChatId);
+                newItem.addEventListener('click', () => loadChatSession(newItem.getAttribute('data-id')));
+                chatList.insertBefore(newItem, chatList.firstChild);
+            }
+
+            // Build messages array for API (role/content format)
+            const history = (chatSessions[currentChatId].messages || []).slice(-20).map(m => ({
+                role: m.isUser ? 'user' : 'assistant',
+                content: m.text,
+            }));
+            history.push({ role: 'user', content: query });
+
+            chatSessions[currentChatId].messages.push({ text: query, isUser: true });
+            appendMessageUI(query, true);
+            if (welcomeScreen) welcomeScreen.style.display = 'none';
+
+            chatInput.value = '';
+            chatInput.style.height = '26px';
+
+            _busy = true;
+            btnSend.disabled = true;
+            showTyping();
+
+            try {
+                const modelName = currentModelText ? currentModelText.textContent : 'NYX AI V3';
+                const modelSlug = MODEL_SLUG[modelName] || 'deepseek/deepseek-chat-v3-0324:free';
+
+                const res = await fetch(_API + '/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + _token,
+                    },
+                    body: JSON.stringify({
+                        messages: history,
+                        temperature: 0.7,
+                        max_tokens: 4096,
+                    }),
+                });
+
+                removeTyping();
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'HTTP ' + res.status);
+                }
+
+                // Create AI bubble for streaming
+                const container = document.createElement('div');
+                container.classList.add('message-container', 'ai');
+                const bubble = document.createElement('div');
+                bubble.classList.add('msg-bubble');
+                bubble.style.whiteSpace = 'pre-wrap';
+                container.appendChild(bubble);
+                chatWrapper.appendChild(container);
+                chatView.scrollTop = chatView.scrollHeight;
+
+                // Stream read — properly buffered to avoid cut-off/corrupted chars
+                const reader = res.body.getReader();
+                const dec = new TextDecoder('utf-8');
+                let full = '';
+                let buffer = ''; // holds incomplete line across chunk boundaries
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += dec.decode(value, { stream: true });
+
+                    // Split by newline, but keep the last (possibly incomplete) piece in buffer
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // last piece may be incomplete — keep for next chunk
+
+                    for (const rawLine of lines) {
+                        const line = rawLine.trim();
+                        if (!line.startsWith('data:')) continue;
+                        const data = line.slice(5).trim();
+                        if (data === '[DONE]' || data === '') continue;
+
+                        try {
+                            const j = JSON.parse(data);
+                            if (j.error) {
+                                throw new Error(j.error.message || j.error);
+                            }
+                            const delta = j.choices?.[0]?.delta?.content;
+                            if (delta) {
+                                full += delta;
+                                bubble.innerHTML = parseMarkdown(full);
+                                chatView.scrollTop = chatView.scrollHeight;
+                            }
+                        } catch (pe) {
+                            // Only ignore genuine JSON parse errors from split chunks
+                            // Anything else (like actual API errors) should propagate
+                            if (pe instanceof SyntaxError) {
+                                // Incomplete/malformed JSON fragment — safe to skip
+                                continue;
+                            }
+                            throw pe;
+                        }
+                    }
+                }
+
+                // Flush any remaining decoder state
+                dec.decode();
+
+                if (!full.trim()) {
+                    full = '⚠ No response received. Please try again.';
+                    bubble.textContent = full;
+                } else {
+                    bubble.innerHTML = parseMarkdown(full);
+                    attachCodeCopyButtons(bubble);
+                }
+
+                // Add action buttons after stream done
+                const actionsRow = document.createElement('div');
+                actionsRow.classList.add('msg-actions');
+                const copyBtn = document.createElement('button');
+                copyBtn.classList.add('btn-msg-action');
+                copyBtn.title = 'Copy';
+                copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+                copyBtn.addEventListener('click', () => copyText(copyBtn, full));
+                const retryBtn = document.createElement('button');
+                retryBtn.classList.add('btn-msg-action', 'action-red');
+                retryBtn.title = 'Retry';
+                retryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>';
+                retryBtn.addEventListener('click', () => { chatInput.value = query; handleSend(); });
+                actionsRow.appendChild(copyBtn);
+                actionsRow.appendChild(retryBtn);
+                container.appendChild(actionsRow);
+
+                // Save to session
+                chatSessions[currentChatId].messages.push({ text: full, isUser: false });
+
+            } catch (err) {
+                removeTyping();
+                appendMessageUI('⚠ Error: ' + err.message, false);
+                chatSessions[currentChatId].messages.push({ text: '⚠ Error: ' + err.message, isUser: false });
+            } finally {
+                _busy = false;
+                btnSend.disabled = false;
+            }
+        }
+
+        btnSend.addEventListener('click', handleSend);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // --- FIX: BUTTON OBROLAN BARU (KOSONG TOTAL TANPA PENANDA MERAH SAMA SEKALI) ---
+        btnNewChat.addEventListener('click', () => {
+            currentChatId = null; // Reset ke mode room kosong
+
+            // Hapus semua penanda kelas merah aktif (Sesuai Permintaan)
+            chatList.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+
+            // Kosongkan gelembung balon chat pada UI layar
+            const activeBubbles = chatWrapper.querySelectorAll('.message-container');
+            activeBubbles.forEach(bubble => bubble.remove());
+
+            // Tampilkan kembali Welcome Screen Teks Utama NYX GPT
+            welcomeScreen.style.display = 'flex';
+
+            // Tutup sidebar otomatis
+            sidebar.classList.add('collapsed');
+            sidebar.classList.remove('open');
+        });
+    </script>
+</body>
+</html>
