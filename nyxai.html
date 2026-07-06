@@ -1094,4 +1094,446 @@
 
             const utter = new SpeechSynthesisUtterance(plain);
             utter.lang = /[a-zA-Z\u00C0-\u024F]/.test(plain) && /\b(the|is|are|and)\b/i.test(plain) ? 'en-US' : 'id-ID';
-            utter.
+            utter.rate = 1.0;
+            utter.onend = () => { btn.classList.remove('tts-playing'); _currentUtterance = null; };
+            utter.onerror = () => { btn.classList.remove('tts-playing'); _currentUtterance = null; };
+
+            _currentUtterance = utter;
+            btn.classList.add('tts-playing');
+            window.speechSynthesis.speak(utter);
+        }
+
+        function regenerateResponse(textPrompt) {
+            appendMessageUI(`Mengulang pemrosesan modul untuk perintah: "${textPrompt}"...`, false);
+        }
+
+        // --- RENDER MESSAGE ELEMENT ONLY ---
+        function appendMessageUI(text, isUser = false, imageDataUrl = null) {
+            if (welcomeScreen.style.display !== 'none') {
+                welcomeScreen.style.display = 'none';
+            }
+
+            const container = document.createElement('div');
+            container.classList.add('message-container', isUser ? 'user' : 'ai');
+
+            const bubble = document.createElement('div');
+            bubble.classList.add('msg-bubble');
+
+            if (imageDataUrl) {
+                const img = document.createElement('img');
+                img.src = imageDataUrl;
+                img.className = 'msg-image';
+                bubble.appendChild(img);
+            }
+
+            const textSpan = document.createElement('div');
+            if (isUser) {
+                textSpan.textContent = text; // user messages stay plain text
+            } else {
+                textSpan.innerHTML = parseMarkdown(text); // AI messages render markdown
+            }
+            bubble.appendChild(textSpan);
+
+            if (!isUser) attachCodeCopyButtons(bubble);
+            container.appendChild(bubble);
+
+            const actionsRow = document.createElement('div');
+            actionsRow.classList.add('msg-actions');
+
+            const copyBtn = document.createElement('button');
+            copyBtn.classList.add('btn-msg-action');
+            copyBtn.title = "Salin Teks";
+            copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+            copyBtn.addEventListener('click', () => copyText(copyBtn, text));
+            actionsRow.appendChild(copyBtn);
+
+            if(!isUser) {
+                // TTS play button
+                const ttsBtn = document.createElement('button');
+                ttsBtn.classList.add('btn-msg-action');
+                ttsBtn.title = "Dengarkan Suara";
+                ttsBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+                ttsBtn.addEventListener('click', () => speakText(ttsBtn, text));
+                actionsRow.appendChild(ttsBtn);
+
+                const redoBtn = document.createElement('button');
+                redoBtn.classList.add('btn-msg-action', 'action-red');
+                redoBtn.title = "Ulang Respon";
+                redoBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>`;
+                redoBtn.addEventListener('click', () => regenerateResponse(text));
+                actionsRow.appendChild(redoBtn);
+            }
+
+            container.appendChild(actionsRow);
+            chatWrapper.appendChild(container);
+            chatView.scrollTop = chatView.scrollHeight;
+        }
+
+        // --- CORE LOAD CHAT SESSION SYSTEM ---
+        function loadChatSession(id) {
+            currentChatId = id;
+            saveSessionsToStorage();
+
+            // Beri tanda warna merah (.active) hanya pada target obrolan ini
+            chatList.querySelectorAll('.chat-item').forEach(item => {
+                if (item.getAttribute('data-id') === id) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+
+            // Bersihkan sisa tampilan pesan obrolan sebelumnya
+            const previousBubbles = chatWrapper.querySelectorAll('.message-container');
+            previousBubbles.forEach(b => b.remove());
+
+            // Load data pesan dari session state array database
+            const session = chatSessions[id];
+            if (session && session.messages.length > 0) {
+                welcomeScreen.style.display = 'none';
+                session.messages.forEach(msg => {
+                    appendMessageUI(msg.text, msg.isUser, msg.image || null);
+                });
+            } else {
+                welcomeScreen.style.display = 'flex';
+            }
+
+            // TUTUP SIDEBAR SECARA OTOMATIS SAAT KLIK OBROLAN LAIN
+            sidebar.classList.add('collapsed');
+            sidebar.classList.remove('open');
+        }
+
+        // --- DELETE CHAT SESSION ---
+        function deleteChatSession(id, itemEl) {
+            if (!confirm('Hapus riwayat obrolan ini?')) return;
+            delete chatSessions[id];
+            saveSessionsToStorage();
+            itemEl.remove();
+            if (currentChatId === id) {
+                currentChatId = null;
+                const bubbles = chatWrapper.querySelectorAll('.message-container');
+                bubbles.forEach(b => b.remove());
+                welcomeScreen.style.display = 'flex';
+                saveSessionsToStorage();
+            }
+        }
+
+        // --- RENDER SIDEBAR CHAT LIST FROM STORAGE (grouped by Hari Ini / Sebelumnya) ---
+        function renderChatListFromStorage() {
+            chatList.innerHTML = '';
+            const ids = Object.keys(chatSessions).sort((a, b) => {
+                const tA = chatSessions[a].ts || 0;
+                const tB = chatSessions[b].ts || 0;
+                return tB - tA;
+            });
+
+            if (ids.length === 0) return;
+
+            const now = Date.now();
+            const oneDay = 86400000;
+            const todayIds = [];
+            const olderIds = [];
+
+            ids.forEach(id => {
+                const ts = chatSessions[id].ts || now;
+                if (now - ts < oneDay) todayIds.push(id);
+                else olderIds.push(id);
+            });
+
+            function renderGroup(label, groupIds) {
+                if (groupIds.length === 0) return;
+                const labelEl = document.createElement('div');
+                labelEl.className = 'chat-section-label';
+                labelEl.textContent = label;
+                chatList.appendChild(labelEl);
+
+                groupIds.forEach(id => {
+                    const session = chatSessions[id];
+                    const item = document.createElement('div');
+                    item.classList.add('chat-item');
+                    if (id === currentChatId) item.classList.add('active');
+                    item.setAttribute('data-id', id);
+
+                    const titleSpan = document.createElement('span');
+                    titleSpan.className = 'chat-item-title';
+                    titleSpan.textContent = session.title;
+                    titleSpan.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                    item.style.cssText = 'display:flex;align-items:center;gap:8px;justify-content:space-between;';
+
+                    const delBtn = document.createElement('button');
+                    delBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>';
+                    delBtn.style.cssText = 'background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;display:flex;flex-shrink:0;opacity:0.5;transition:opacity 0.15s;';
+                    delBtn.title = 'Hapus obrolan';
+                    delBtn.addEventListener('mouseenter', () => delBtn.style.opacity = '1');
+                    delBtn.addEventListener('mouseleave', () => delBtn.style.opacity = '0.5');
+                    delBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteChatSession(id, item);
+                    });
+
+                    item.appendChild(titleSpan);
+                    item.appendChild(delBtn);
+                    item.addEventListener('click', () => loadChatSession(id));
+                    chatList.appendChild(item);
+                });
+            }
+
+            renderGroup('Hari Ini', todayIds);
+            renderGroup('Sebelumnya', olderIds);
+        }
+
+        // ── AUTH: check token on load ─────────────────────────────────────
+        const _API = window.location.origin;
+        const _token = localStorage.getItem('nyxai_token') || '';
+        if (!_token) { window.location.href = '/login.html'; }
+        else {
+            fetch(_API + '/api/verify', { headers: { Authorization: 'Bearer ' + _token } })
+                .then(r => r.json())
+                .then(d => { if (!d.valid) { localStorage.removeItem('nyxai_token'); window.location.href = '/login.html'; } })
+                .catch(() => {});
+        }
+
+        // ── MARKDOWN PARSER ────────────────────────────────────────────────
+        function escHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function parseMarkdown(text) {
+            if (!text) return '';
+            let h = escHtml(text);
+
+            // Code blocks ```lang\ncode\n```
+            h = h.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+                const langLabel = lang || 'text';
+                return `<pre><span class="code-lang-tag">${langLabel}</span><code class="lang-${langLabel}">${code.trim()}</code></pre>`;
+            });
+
+            // Inline code
+            h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+            // Bold **text** or __text__
+            h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            h = h.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+
+            // Italic *text* or _text_
+            h = h.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+            h = h.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+
+            // Headings
+            h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+            h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+            // Blockquote
+            h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+            // Horizontal rule
+            h = h.replace(/^---+$/gm, '<hr>');
+
+            // Unordered / ordered lists
+            h = h.replace(/^[-*+] (.+)$/gm, '<li>$1</li>');
+            h = h.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+            h = h.replace(/(<li>[\s\S]+?<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+
+            // Paragraphs — wrap loose lines, skip block-level tags
+            const lines = h.split('\n');
+            const out = [];
+            let buf = [];
+            let inPre = false;
+
+            for (const ln of lines) {
+                if (ln.includes('<pre>')) inPre = true;
+                if (inPre) {
+                    out.push(ln);
+                    if (ln.includes('</pre>')) inPre = false;
+                    continue;
+                }
+                if (/^<(h[123]|ul|ol|li|blockquote|hr|table|tr|th|td)/.test(ln)) {
+                    if (buf.length) { out.push('<p>' + buf.join(' ') + '</p>'); buf = []; }
+                    out.push(ln);
+                } else if (!ln.trim()) {
+                    if (buf.length) { out.push('<p>' + buf.join(' ') + '</p>'); buf = []; }
+                } else {
+                    buf.push(ln);
+                }
+            }
+            if (buf.length) out.push('<p>' + buf.join(' ') + '</p>');
+
+            return out.join('\n');
+        }
+
+        // Attach copy buttons to all <pre> code blocks inside a bubble
+        function attachCodeCopyButtons(bubble) {
+            bubble.querySelectorAll('pre').forEach(pre => {
+                if (pre.querySelector('.code-copy-btn')) return; // already attached
+                const btn = document.createElement('button');
+                btn.className = 'code-copy-btn';
+                btn.textContent = 'Copy';
+                btn.addEventListener('click', () => {
+                    const codeEl = pre.querySelector('code');
+                    const codeText = codeEl ? codeEl.textContent : pre.textContent;
+                    navigator.clipboard.writeText(codeText).then(() => {
+                        btn.textContent = '✓ Copied';
+                        setTimeout(() => btn.textContent = 'Copy', 1500);
+                    });
+                });
+                pre.appendChild(btn);
+            });
+        }
+
+        // ── MODEL MAP (name shown in UI → OpenRouter slug) ────────────────
+        const MODEL_SLUG = {
+            'NYX AI V3':        'deepseek/deepseek-chat-v3-0324:free',
+            'ChatGPT Plus 5.5': 'openai/gpt-4o',
+            'ChatGPT 4':        'openai/gpt-4',
+            'Gemini Flash 3':   'google/gemini-2.0-flash-exp:free',
+            'Gemini Pro 3':     'google/gemini-pro-1.5',
+            'Claude Sonnet 4.6':'anthropic/claude-3.5-sonnet',
+        };
+
+        // ── TYPING INDICATOR ──────────────────────────────────────────────
+        function showTyping() {
+            const c = document.createElement('div');
+            c.classList.add('message-container', 'ai');
+            c.id = '_typing';
+            c.innerHTML = '<div class="msg-bubble" style="display:flex;gap:5px;align-items:center;padding:14px 16px">' +
+                '<span style="width:6px;height:6px;border-radius:50%;background:var(--accent-red);animation:_tp 1.2s ease-in-out infinite"></span>' +
+                '<span style="width:6px;height:6px;border-radius:50%;background:var(--accent-red);animation:_tp 1.2s ease-in-out .15s infinite"></span>' +
+                '<span style="width:6px;height:6px;border-radius:50%;background:var(--accent-red);animation:_tp 1.2s ease-in-out .3s infinite"></span>' +
+                '</div>';
+            if (!document.getElementById('_tp_style')) {
+                const st = document.createElement('style');
+                st.id = '_tp_style';
+                st.textContent = '@keyframes _tp{0%,80%,100%{transform:scale(1);opacity:.4}40%{transform:scale(1.4);opacity:1}}';
+                document.head.appendChild(st);
+            }
+            chatWrapper.appendChild(c);
+            chatView.scrollTop = chatView.scrollHeight;
+        }
+        function removeTyping() { const e = document.getElementById('_typing'); if (e) e.remove(); }
+
+        // ── CORE SEND — real streaming fetch to /api/chat (supports image vision) ─
+        let _busy = false;
+
+        async function handleSend() {
+            const query = chatInput.value.trim();
+            const attachedImage = pendingImageBase64;
+            if ((!query && !attachedImage) || _busy) return;
+
+            // Create session if needed
+            if (currentChatId === null) {
+                currentChatId = 'session_' + Date.now();
+                const title = (query || 'Gambar').length > 28 ? (query || 'Gambar').substring(0, 28) + '…' : (query || 'Gambar');
+                chatSessions[currentChatId] = { title, messages: [], ts: Date.now() };
+            }
+
+            // Build messages array for API (role/content format, with vision support)
+            const history = (chatSessions[currentChatId].messages || []).slice(-16).map(m => {
+                if (m.image) {
+                    return {
+                        role: m.isUser ? 'user' : 'assistant',
+                        content: [
+                            { type: 'text', text: m.text || '' },
+                            { type: 'image_url', image_url: { url: m.image } }
+                        ]
+                    };
+                }
+                return { role: m.isUser ? 'user' : 'assistant', content: m.text };
+            });
+
+            // Current message (with image if attached)
+            if (attachedImage) {
+                history.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: query || 'Tolong jelaskan gambar ini.' },
+                        { type: 'image_url', image_url: { url: attachedImage } }
+                    ]
+                });
+            } else {
+                history.push({ role: 'user', content: query });
+            }
+
+            chatSessions[currentChatId].messages.push({ text: query, isUser: true, image: attachedImage || null });
+            chatSessions[currentChatId].ts = Date.now();
+            appendMessageUI(query, true, attachedImage);
+            if (welcomeScreen) welcomeScreen.style.display = 'none';
+
+            chatInput.value = '';
+            chatInput.style.height = '26px';
+            try { localStorage.removeItem(_STORAGE_KEY_DRAFT); } catch(e) {}
+
+            // Clear pending image
+            pendingImageBase64 = null;
+            fileInput.value = '';
+            imagePreviewWrap.classList.remove('show');
+            imagePreviewImg.src = '';
+
+            saveSessionsToStorage();
+            renderChatListFromStorage();
+
+            _busy = true;
+            btnSend.disabled = true;
+            showTyping();
+
+            try {
+                const res = await fetch(_API + '/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + _token,
+                    },
+                    body: JSON.stringify({
+                        messages: history,
+                        temperature: 0.7,
+                        max_tokens: 4096,
+                    }),
+                });
+
+                removeTyping();
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'HTTP ' + res.status);
+                }
+
+                // Create AI bubble for streaming
+                const container = document.createElement('div');
+                container.classList.add('message-container', 'ai');
+                const bubble = document.createElement('div');
+                bubble.classList.add('msg-bubble');
+                bubble.style.whiteSpace = 'pre-wrap';
+                container.appendChild(bubble);
+                chatWrapper.appendChild(container);
+                chatView.scrollTop = chatView.scrollHeight;
+
+                // Stream read — properly buffered to avoid cut-off/corrupted chars
+                const reader = res.body.getReader();
+                const dec = new TextDecoder('utf-8');
+                let full = '';
+                let buffer = ''; // holds incomplete line across chunk boundaries
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += dec.decode(value, { stream: true });
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const rawLine of lines) {
+                        const line = rawLine.trim();
+                        if (!line.startsWith('data:')) continue;
+                        const data = line.slice(5).trim();
+                        if (data === '[DONE]' || data === '') continue;
+
+                        try {
+                            const j = JSON.parse(data);
+                            if (j.error) {
+                                throw new Error(j.error.message || j.error);
+                           
