@@ -114,14 +114,14 @@ export default async function handler(req) {
 
       // ── HARDCODE: always use deepseek free — most stable free model ──────
       // The :free suffix MUST be in the slug sent to OpenRouter
-      const MODEL = 'deepseek/deepseek-chat-v3-0324:free';
+      const MODEL = 'deepseek/deepseek-v4-flash';
 
       const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
           'Authorization': `Bearer ${OR_KEY}`,
-          'HTTP-Referer':  'https://nyxai.vercel.app',
+          'HTTP-Referer':  'https://nyx-beta-ai.vercel.app',
           'X-Title':       'NyxAI',
         },
         body: JSON.stringify({
