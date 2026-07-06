@@ -118,7 +118,7 @@ export default async function handler(req) {
       );
 
       // Text-only free model vs vision-capable free model
-      const TEXT_MODEL   = 'deepseek/deepseek-v4-flash';
+      const TEXT_MODEL   = 'openai/gpt-5-mini';
       const VISION_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
       const MODEL = hasImage ? VISION_MODEL : TEXT_MODEL;
 
