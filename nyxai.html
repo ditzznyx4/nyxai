@@ -1536,4 +1536,155 @@
                             const j = JSON.parse(data);
                             if (j.error) {
                                 throw new Error(j.error.message || j.error);
-                           
+                           }
+                            const delta = j.choices?.[0]?.delta?.content;
+                            if (delta) {
+                                full += delta;
+                                bubble.innerHTML = parseMarkdown(full);
+                                chatView.scrollTop = chatView.scrollHeight;
+                            }
+                        } catch (pe) {
+                            if (pe instanceof SyntaxError) continue;
+                            throw pe;
+                        }
+                    }
+                }
+
+                dec.decode();
+
+                if (!full.trim()) {
+                    full = '⚠ No response received. Please try again.';
+                    bubble.textContent = full;
+                } else {
+                    bubble.innerHTML = parseMarkdown(full);
+                    attachCodeCopyButtons(bubble);
+                }
+
+                // Add action buttons after stream done (copy + TTS + retry)
+                const actionsRow = document.createElement('div');
+                actionsRow.classList.add('msg-actions');
+
+                const copyBtn = document.createElement('button');
+                copyBtn.classList.add('btn-msg-action');
+                copyBtn.title = 'Copy';
+                copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+                copyBtn.addEventListener('click', () => copyText(copyBtn, full));
+                actionsRow.appendChild(copyBtn);
+
+                const ttsBtn = document.createElement('button');
+                ttsBtn.classList.add('btn-msg-action');
+                ttsBtn.title = 'Dengarkan Suara';
+                ttsBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+                ttsBtn.addEventListener('click', () => speakText(ttsBtn, full));
+                actionsRow.appendChild(ttsBtn);
+
+                const retryBtn = document.createElement('button');
+                retryBtn.classList.add('btn-msg-action', 'action-red');
+                retryBtn.title = 'Retry';
+                retryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>';
+                retryBtn.addEventListener('click', () => { chatInput.value = query; handleSend(); });
+                actionsRow.appendChild(retryBtn);
+
+                container.appendChild(actionsRow);
+
+                // Save to session + storage
+                chatSessions[currentChatId].messages.push({ text: full, isUser: false, image: null });
+                chatSessions[currentChatId].ts = Date.now();
+                saveSessionsToStorage();
+                renderChatListFromStorage();
+
+            } catch (err) {
+                removeTyping();
+                appendMessageUI('⚠ Error: ' + err.message, false);
+                chatSessions[currentChatId].messages.push({ text: '⚠ Error: ' + err.message, isUser: false });
+                saveSessionsToStorage();
+            } finally {
+                _busy = false;
+                btnSend.disabled = false;
+            }
+        }
+
+        btnSend.addEventListener('click', handleSend);
+        chatInput.addEventListener('keydown', (e) => {
+            // Shift+Enter = newline (default browser behavior, do nothing special)
+            // Plain Enter = ALSO just newline now (per user request: must click Send button manually)
+            if (e.key === 'Enter' && e.shiftKey) {
+                setTimeout(() => {
+                    chatInput.style.height = '26px';
+                    chatInput.style.height = (chatInput.scrollHeight) + 'px';
+                    try { localStorage.setItem(_STORAGE_KEY_DRAFT, chatInput.value); } catch(e) {}
+                }, 0);
+            }
+            // Note: plain Enter no longer auto-sends — user must click the Send button
+        });
+
+        // --- OBROLAN BARU BUTTON ---
+        btnNewChat.addEventListener('click', () => {
+            currentChatId = null;
+            saveSessionsToStorage();
+
+            chatList.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+
+            const activeBubbles = chatWrapper.querySelectorAll('.message-container');
+            activeBubbles.forEach(bubble => bubble.remove());
+
+            welcomeScreen.style.display = 'flex';
+
+            sidebar.classList.add('collapsed');
+            sidebar.classList.remove('open');
+        });
+
+        // --- GENERATE IMAGE BUTTON (opens prompt, calls /api/generate-image) ---
+        btnGenImage.addEventListener('click', async () => {
+            const prompt = window.prompt('Deskripsikan gambar yang ingin kamu buat:');
+            if (!prompt || !prompt.trim()) return;
+
+            if (currentChatId === null) {
+                currentChatId = 'session_' + Date.now();
+                const title = 'Gambar: ' + (prompt.length > 20 ? prompt.substring(0, 20) + '…' : prompt);
+                chatSessions[currentChatId] = { title, messages: [], ts: Date.now() };
+            }
+
+            chatSessions[currentChatId].messages.push({ text: prompt, isUser: true, image: null });
+            appendMessageUI(prompt, true);
+            if (welcomeScreen) welcomeScreen.style.display = 'none';
+            saveSessionsToStorage();
+            renderChatListFromStorage();
+
+            showTyping();
+            try {
+                const res = await fetch(_API + '/api/generate-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + _token,
+                    },
+                    body: JSON.stringify({ prompt }),
+                });
+                removeTyping();
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Gagal membuat gambar.');
+
+                const imageUrl = data.image_url || data.url;
+                if (!imageUrl) throw new Error('Server tidak mengembalikan gambar.');
+
+                chatSessions[currentChatId].messages.push({ text: 'Gambar berhasil dibuat:', isUser: false, image: imageUrl });
+                appendMessageUI('Gambar berhasil dibuat:', false, imageUrl);
+                saveSessionsToStorage();
+                renderChatListFromStorage();
+            } catch (err) {
+                removeTyping();
+                appendMessageUI('⚠ Gagal membuat gambar: ' + err.message, false);
+            }
+        });
+
+        // ── INIT: load persisted chats on page load ────────────────────────
+        loadSessionsFromStorage();
+        renderChatListFromStorage();
+        if (currentChatId && chatSessions[currentChatId]) {
+            loadChatSession(currentChatId);
+        }
+    </script>
+</body>
+</html>
