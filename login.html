@@ -462,12 +462,7 @@ async function doLogin() {
     const data = await res.json();
 
     if (!res.ok) {
-      // Already logged in di device lain
-      if (data.code === 'ALREADY_LOGGED_IN') {
-        showError(loginError, 'Username And Password Already Use');
-      } else {
-        showError(loginError, data.error);
-      }
+      showError(loginError, data.error);
       setLoading(btnSignin, false, 'Sign In');
       return;
     }
